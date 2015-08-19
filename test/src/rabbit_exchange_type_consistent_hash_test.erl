@@ -29,6 +29,7 @@ test() ->
 t(Qs) ->
     ok = test_with_rk(Qs),
     ok = test_with_header(Qs),
+    ok = test_with_property(Qs),
     ok.
 
 test_with_rk(Qs) ->
@@ -47,6 +48,15 @@ test_with_header(Qs) ->
                   H = [{<<"hashme">>, longstr, rnd()}],
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
           end, [{<<"hash-header">>, longstr, <<"hashme">>}], Qs).
+
+test_with_property(Qs) ->
+    test0(fun () ->
+                  #'basic.publish'{exchange = <<"e">>}
+          end,
+          fun() ->
+                  #amqp_msg{props = #'P_basic'{message_id = rnd()}, payload = <<>>}
+          end, [{<<"hash-property">>, longstr, <<"message_id">>}], Qs).
+
 
 rnd() ->
     list_to_binary(integer_to_list(random:uniform(1000000))).
