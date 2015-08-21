@@ -158,13 +158,13 @@ test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
                                     queue = Q, exclusive = true}) || Q <- Queues],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind'{queue = Q,
-                                               exchange                                = <<"e">>,
-                                               routing_key                             = <<"10">>})
+                                               exchange = <<"e">>,
+                                               routing_key  = <<"10">>})
      || Q <- [Q1, Q2]],
     [#'queue.bind_ok'{} =
          amqp_channel:call(Chan, #'queue.bind'{queue = Q,
-                                               exchange                                = <<"e">>,
-                                               routing_key                             = <<"20">>})
+                                               exchange = <<"e">>,
+                                               routing_key = <<"20">>})
      || Q <- [Q3, Q4]],
     #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
     [amqp_channel:call(Chan,
@@ -175,7 +175,7 @@ test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
         [begin
              #'queue.declare_ok'{message_count = M} =
                  amqp_channel:call(Chan, #'queue.declare'{queue = Q,
-                                                          exclusive                                  = true}),
+                                                          exclusive = true}),
              M
          end || Q <- Queues],
     Count = lists:sum(Counts), %% All messages got routed
