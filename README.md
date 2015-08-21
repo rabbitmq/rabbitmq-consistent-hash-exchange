@@ -153,9 +153,9 @@ header, they will all get routed to the same (arbitrarily-chosen) queue.
 ## Routing on a message property
 
 In addition to a value in the header property, you can also route on the
-``message_id`` or ``correlation_id`` message property. To do so, declare the
-exchange with a string argument called "hash-property" naming the property to be
-used. For example using the Erlang client as above:
+``message_id``, ``correlation_id``, or ``timestamp`` message property. To do so, 
+declare the exchange with a string argument called "hash-property" naming the 
+property to be used. For example using the Erlang client as above:
 
 ```erlang
     amqp_channel:call(
