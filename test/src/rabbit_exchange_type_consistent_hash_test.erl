@@ -17,6 +17,7 @@
 -module(rabbit_exchange_type_consistent_hash_test).
 -export([test/0]).
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %% Because the routing is probabilistic, we can't really test a great
 %% deal here.
@@ -29,10 +30,17 @@ test() ->
 t(Qs) ->
     ok = test_with_rk(Qs),
     ok = test_with_header(Qs),
+    ok = test_with_correlation_id(Qs),
+    ok = test_with_message_id(Qs),
+    ok = test_with_timestamp(Qs),
+    ok = test_non_supported_property(),
+    ok = test_binding_with_negative_routing_key(),
+    ok = test_binding_with_non_numeric_routing_key(),
+    ok = test_mutually_exclusive_arguments(),
     ok.
 
 test_with_rk(Qs) ->
-    test0(fun () ->
+    test0(fun() ->
                   #'basic.publish'{exchange = <<"e">>, routing_key = rnd()}
           end,
           fun() ->
@@ -40,7 +48,7 @@ test_with_rk(Qs) ->
           end, [], Qs).
 
 test_with_header(Qs) ->
-    test0(fun () ->
+    test0(fun() ->
                   #'basic.publish'{exchange = <<"e">>}
           end,
           fun() ->
@@ -48,8 +56,89 @@ test_with_header(Qs) ->
                   #amqp_msg{props = #'P_basic'{headers = H}, payload = <<>>}
           end, [{<<"hash-header">>, longstr, <<"hashme">>}], Qs).
 
+test_with_correlation_id(Qs) ->
+    test0(fun() ->
+                  #'basic.publish'{exchange = <<"e">>}
+          end,
+          fun() ->
+                  #amqp_msg{props = #'P_basic'{correlation_id = rnd()}, payload = <<>>}
+          end, [{<<"hash-property">>, longstr, <<"correlation_id">>}], Qs).
+
+test_with_message_id(Qs) ->
+    test0(fun() ->
+                  #'basic.publish'{exchange = <<"e">>}
+          end,
+          fun() ->
+                  #amqp_msg{props = #'P_basic'{message_id = rnd()}, payload = <<>>}
+          end, [{<<"hash-property">>, longstr, <<"message_id">>}], Qs).
+
+test_with_timestamp(Qs) ->
+    test0(fun() ->
+                  #'basic.publish'{exchange = <<"e">>}
+          end,
+          fun() ->
+                  #amqp_msg{props = #'P_basic'{timestamp = rndint()}, payload = <<>>}
+          end, [{<<"hash-property">>, longstr, <<"timestamp">>}], Qs).
+
+test_mutually_exclusive_arguments() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    process_flag(trap_exit, true),
+    Cmd = #'exchange.declare'{
+             exchange  = <<"fail">>,
+             type      = <<"x-consistent-hash">>,
+             arguments = [{<<"hash-header">>, longstr, <<"foo">>},
+                          {<<"hash-property">>, longstr, <<"bar">>}]
+            },
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    ok.
+
+test_non_supported_property() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    process_flag(trap_exit, true),
+    Cmd = #'exchange.declare'{
+             exchange  = <<"fail">>,
+             type      = <<"x-consistent-hash">>,
+             arguments = [{<<"hash-property">>, longstr, <<"app_id">>}]
+            },
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    ok.
+
+test_binding_with_negative_routing_key() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Declare1 = #'exchange.declare'{ exchange = <<"bind-fail">>,
+                                    type = <<"x-consistent-hash">> },
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
+    Declare2 = #'queue.declare'{ queue = <<"test-queue">> },
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
+    process_flag(trap_exit, true),
+    Cmd = #'queue.bind'{ exchange = <<"bind-fail">>,
+                         routing_key = <<"-1">> },
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    ok.
+
+test_binding_with_non_numeric_routing_key() ->
+    {ok, Conn} = amqp_connection:start(#amqp_params_network{}),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    Declare1 = #'exchange.declare'{ exchange = <<"bind-fail">>,
+                                    type = <<"x-consistent-hash">> },
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare1),
+    Declare2 = #'queue.declare'{ queue = <<"test-queue">> },
+    #'queue.declare_ok'{} = amqp_channel:call(Chan, Declare2),
+    process_flag(trap_exit, true),
+    Cmd = #'queue.bind'{ exchange = <<"bind-fail">>,
+                         routing_key = <<"not-a-number">> },
+    ?assertExit(_, amqp_channel:call(Chan, Cmd)),
+    ok.
+
+
 rnd() ->
-    list_to_binary(integer_to_list(random:uniform(1000000))).
+    list_to_binary(integer_to_list(rndint())).
+
+rndint() ->
+    random:uniform(1000000).
 
 test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     Count = 10000,
@@ -58,24 +147,24 @@ test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     {ok, Chan} = amqp_connection:open_channel(Conn),
     #'exchange.declare_ok'{} =
         amqp_channel:call(Chan,
-                          #'exchange.declare' {
-                            exchange = <<"e">>,
-                            type = <<"x-consistent-hash">>,
-                            auto_delete = true,
-                            arguments = DeclareArgs
-                           }),
+                          #'exchange.declare'{
+                             exchange    = <<"e">>,
+                             type        = <<"x-consistent-hash">>,
+                             auto_delete = true,
+                             arguments   = DeclareArgs
+                            }),
     [#'queue.declare_ok'{} =
-         amqp_channel:call(Chan, #'queue.declare' {
-                             queue = Q, exclusive = true }) || Q <- Queues],
+         amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q, exclusive = true}) || Q <- Queues],
     [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                                 exchange = <<"e">>,
-                                                 routing_key = <<"10">> })
+         amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                               exchange = <<"e">>,
+                                               routing_key  = <<"10">>})
      || Q <- [Q1, Q2]],
     [#'queue.bind_ok'{} =
-         amqp_channel:call(Chan, #'queue.bind' { queue = Q,
-                                                 exchange = <<"e">>,
-                                                 routing_key = <<"20">> })
+         amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+                                               exchange = <<"e">>,
+                                               routing_key = <<"20">>})
      || Q <- [Q3, Q4]],
     #'tx.select_ok'{} = amqp_channel:call(Chan, #'tx.select'{}),
     [amqp_channel:call(Chan,
@@ -84,15 +173,15 @@ test0(MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues) ->
     amqp_channel:call(Chan, #'tx.commit'{}),
     Counts =
         [begin
-            #'queue.declare_ok'{message_count = M} =
-                 amqp_channel:call(Chan, #'queue.declare' {queue     = Q,
-                                                           exclusive = true }),
+             #'queue.declare_ok'{message_count = M} =
+                 amqp_channel:call(Chan, #'queue.declare'{queue = Q,
+                                                          exclusive = true}),
              M
          end || Q <- Queues],
     Count = lists:sum(Counts), %% All messages got routed
     [true = C > 0.01 * Count || C <- Counts], %% We are not *grossly* unfair
-    amqp_channel:call(Chan, #'exchange.delete' { exchange = <<"e">> }),
-    [amqp_channel:call(Chan, #'queue.delete' { queue = Q }) || Q <- Queues],
+    amqp_channel:call(Chan, #'exchange.delete'{exchange = <<"e">>}),
+    [amqp_channel:call(Chan, #'queue.delete'{queue = Q}) || Q <- Queues],
     amqp_channel:close(Chan),
     amqp_connection:close(Conn),
     ok.
