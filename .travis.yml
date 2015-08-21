@@ -1,5 +1,8 @@
 sudo: false
 language: erlang
+notifications:
+  email:
+    - alerts@rabbitmq.com
 addons:
   apt:
     packages:
