@@ -45,10 +45,18 @@ is a number-as-a-string which indicates the number of points in the
 hash space at which you wish the queue to appear. The actual points
 are generated randomly.
 
-So, if you wish for queue A to receive twice as many messages as queue
-B, then you bind the queue A with a binding key of twice the number
-(as a string -- binding keys are always strings) of the binding key of
-the binding to queue B.
+The hashing distributes *routing keys* among queues, not *messages*
+among queues; all messages with the same routing key will go the
+same queue.  So, if you wish for queue A to receive twice as many
+routing keys routed to it than are routed to queue B, then you bind
+the queue A with a binding key of twice the number (as a string --
+binding keys are always strings) of the binding key of the binding
+to queue B.  Note that it's probablistic: if only two distinct
+routing keys are used on all the messages, there's a chance both
+keys will route (consistently!) to the same queue, even though other
+queues have higher values in their binding key.  With a larger set
+of routing keys used, the statistical distribution of routing keys
+approaches the ratios of the binding keys.
 
 Each message gets delivered to at most one queue. Normally, each
 message gets delivered to exactly one queue, but there is a race
@@ -104,13 +112,14 @@ ok.
 
 As you can see, the queues `q0` and `q1` get bound each with 10 points
 in the hash space to the exchange `e` which means they'll each get
-roughly the same number of messages. The queues `q2` and `q3` however,
-get 20 points each which means they'll each get roughly the same
-number of messages too, but that will be approximately twice as many
-as `q0` and `q1`. We then publish 100,000 messages to our exchange
-with random routing keys. After this has completed, running
-`rabbitmqctl list_queues` should show that the messages have been
-distributed approximately as desired.
+roughly the same number of routing keys. The queues `q2` and `q3`
+however, get 20 points each which means they'll each get roughly the
+same number of routing keys too, but that will be approximately twice
+as many as `q0` and `q1`. We then publish 100,000 messages to our
+exchange with random routing keys, the queues will get their share of
+messages roughly equal to the binding keys ratios. After this has
+completed, running `rabbitmqctl list_queues` should show that the
+messages have been distributed approximately as desired.
 
 Note the `routing_key`s in the bindings are numbers-as-strings. This
 is because AMQP specifies the routing_key must be a string.
