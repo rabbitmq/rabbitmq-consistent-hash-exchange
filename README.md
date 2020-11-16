@@ -1,6 +1,11 @@
 # RabbitMQ Consistent Hash Exchange Type
 
-## Introduction
+## This was migrated to https://github.com/rabbitmq/rabbitmq-server
+
+This repository has been moved to the main unified RabbitMQ "monorepo", including all open issues. You can find the source under [/deps/rabbitmq_consistent_hash_exchange](https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbitmq_consistent_hash_exchange).
+All issues have been transferred.
+
+## Overview
 
 This plugin adds a consistent-hash exchange type to RabbitMQ. This
 exchange type uses consistent hashing (intro blog posts: [one](http://www.martinbroadhurst.com/Consistent-Hash-Ring.html), [two](http://michaelnielsen.org/blog/consistent-hashing/), [three](https://akshatm.svbtle.com/consistent-hash-rings-theory-and-implementation)) to distribute
